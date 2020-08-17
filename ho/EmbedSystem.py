@@ -14,7 +14,7 @@ class SimpleEmbed(SimpleEmbedSystem):
     def __init__(self, ses):
         super().__init__(ses.title, ses.color, emoji=ses.emoji, url=ses.url, icon_url=ses.icon_url)
         self.embed = discord.Embed(title="", author="", color=ses.color)
-        self.embed.set_footer(text="HypixelOnline v 1.8.1")
+        self.embed.set_footer(text="HypixelOnline v 1.8.2")
         if ses.emoji == "":
             self.embed.set_author(name=ses.title, url=ses.url, icon_url=ses.icon_url)
         else:

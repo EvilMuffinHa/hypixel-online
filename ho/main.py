@@ -6,8 +6,13 @@ import aiohttp
 import os
 import firebase_admin
 from firebase_admin import credentials, db
+# noinspection PyUnresolvedReferences
 import EmbedSystem
 import asyncio
+import argparse
+import shlex
+
+
 
 load_dotenv()
 
@@ -103,10 +108,8 @@ e_prestige = EmbedSystem.SimpleEmbedSystem("Congrats!", 0xdda9e5, emoji="🎉")
 e_online = EmbedSystem.SimpleEmbedSystem("Status", 0x85e57e, emoji="🎮")
 e_err = EmbedSystem.SimpleEmbedSystem("Error", 0xe8252e, emoji="❌")
 e_ping = EmbedSystem.SimpleEmbedSystem("Pong!", 0x01011c, emoji="🏓")
-e_disappoint = EmbedSystem.SimpleEmbedSystem("._.", 0xc6856f,
-											 icon_url="https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fabload.de%2Fimg%2Fghjyh5jah.jpg&f=1&nofb=1")
-e_goof = EmbedSystem.SimpleEmbedSystem(".-.", 0xc6856f,
-									   icon_url="https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Ftse1.mm.bing.net%2Fth%3Fid%3DOIP.1LYdHD4hKvmJs8s9AorEoQHaEK%26pid%3DApi%26h%3D160&f=1")
+e_sudo = EmbedSystem.SimpleEmbedSystem("Sudo", 0x000000,
+									   icon_url="https://cdn.discordapp.com/avatars/694645515983519794/9d425f6f93006a03dfa32b060a8449ee.png?size=128")
 
 
 @client.command(name="mod")
@@ -137,13 +140,293 @@ async def mod(msg):
 	if setting == "prefix":
 		js = await get_data("guilds")
 		if msg.message.guild.id in js.keys():
+
+			if js[msg.message.guild.id][1]:
+				embed = EmbedSystem.SimpleEmbed(e_mod)
+				embed.add_field("The prefix has been forcelocked by a sudoer!", "", False)
+				await stext(msg, embed)
+				return
 			js[msg.message.guild.id][0] = value
 		else:
-			js[msg.message.guild.id] = [value]
+			js[msg.message.guild.id] = [value, False]
 		await set_data("guilds", js)
 		embed = EmbedSystem.SimpleEmbed(e_mod)
 		embed.add_field("Prefix set to `" + value + "`!", "", False)
 		await stext(msg, embed)
+
+
+@client.command(name="sudo")
+async def sudo(msg):
+	if msg.message.author.id not in WHITELISTED_IDS:
+		embed = EmbedSystem.SimpleEmbed(e_err)
+		embed.add_field(msg.message.author.name + " is not in the sudoers file. This incident will be reported. ", "",
+						False)
+		await stext(msg, embed)
+		return
+	if len(msg.message.content.split(" ")) == 1:
+		embed = EmbedSystem.SimpleEmbed(e_sudo)
+		embed.add_field("What are you using sudo for anyways?!??? Idiot. ", "", False)
+		await stext(msg, embed)
+		return
+	if msg.message.content.split(" ")[1] == "say":
+		parser = argparse.ArgumentParser(description='Says something')
+		parser.add_argument("message", type=str, help='sends message')
+		parser.add_argument("-g", "--guild", type=str, help="Specifies the server")
+		parser.add_argument("-c", "--channel", type=str, help="Specifies the channel")
+		parser.add_argument("-s", "--silent", help="Silences message on response. ", action="store_true")
+		parser.add_argument("-d", "--dm", type=int, help="Direct messages someone. ")
+
+		try:
+			string = ' '.join(msg.message.content.split(" ")[2:])
+			args = parser.parse_args(shlex.split(string))
+			if not (args.guild or args.channel or args.dm):
+				await msg.send(args.message)
+				if not args.silent:
+					embed = EmbedSystem.SimpleEmbed(e_sudo)
+					embed.add_field("Message sent!", args.message, False)
+					await stext(msg, embed)
+				return
+			elif args.channel and not args.guild and not args.dm:
+				embed = EmbedSystem.SimpleEmbed(e_sudo)
+				embed.add_field("Please specify a guild along with the channel using -g. ", "", False)
+				await stext(msg, embed)
+				return
+			elif args.guild and not args.channel and not args.dm:
+				for guild in client.guilds:
+					if guild.name == ' '.join(args.guild):
+						await guild.text_channels[0].send(args.message)
+						if not args.silent:
+							embed = EmbedSystem.SimpleEmbed(e_sudo)
+							embed.add_field("Message sent!", args.message, False)
+							await stext(msg, embed)
+						return
+				embed = EmbedSystem.SimpleEmbed(e_sudo)
+				embed.add_field("Guild not found. ", "", False)
+				await stext(msg, embed)
+				return
+			elif args.guild and args.channel and not args.dm:
+				for guild in client.guilds:
+					if guild.name == args.guild:
+						for i in range(len(guild.text_channels)):
+							if guild.text_channels[i].name == args.channel:
+								await guild.text_channels[i].send(args.message)
+								if not args.silent:
+									embed = EmbedSystem.SimpleEmbed(e_sudo)
+									embed.add_field("Message sent!", args.message, False)
+									await stext(msg, embed)
+								return
+
+				embed = EmbedSystem.SimpleEmbed(e_sudo)
+				embed.add_field("Guild / Channel not found. ", "", False)
+				await stext(msg, embed)
+				return
+			elif args.dm and (args.guild or args.channel):
+				embed = EmbedSystem.SimpleEmbed(e_sudo)
+				embed.add_field("The --dm flag must be on its own! ", "", False)
+				await stext(msg, embed)
+			else:
+				try:
+					user = client.get_user(args.dm)
+				except:
+					embed = EmbedSystem.SimpleEmbed(e_sudo)
+					embed.add_field("User not found. ", args.message, False)
+					await stext(msg, embed)
+					return
+				await user.send(args.message)
+				if not args.silent:
+					embed = EmbedSystem.SimpleEmbed(e_sudo)
+					embed.add_field("Message sent!", args.message, False)
+					await stext(msg, embed)
+				return
+		except SystemExit:
+			embed = EmbedSystem.SimpleEmbed(e_sudo)
+			embed.add_field(parser.format_usage(), '\n'.join(parser.format_help().split("\n")[1:]), False)
+			await stext(msg, embed)
+	if msg.message.content.split(" ")[1] == "embed":
+		parser = argparse.ArgumentParser(description="Sends an embed")
+		parser.add_argument("title", type=str, help="Adds a title to the embed")
+		parser.add_argument("color", type=int, help="Sets the color of the embed")
+		parser.add_argument("-m", "--message", type=str, help="Adds a message along with the embed. ", default="")
+		parser.add_argument("-a", "--aname", type=str, help="Sets the name of the author", default="")
+		parser.add_argument("-u", "--aurl", type=str, help="Sets the url of the author", default="")
+		parser.add_argument("-i", "--aicourl", type=str, help="Sets the icon url of the author", default="")
+		parser.add_argument("-t", "--thumbnail", type=str, help="Sets the thumbnail of the embed", default="")
+		parser.add_argument("-p", "--picture", type=str, help="Sets the image of the embed", default="")
+		parser.add_argument("-o", "--footer", type=str, help="Sets the footer of the embed", default="")
+		parser.add_argument("-f", "--field", nargs=3,
+							help="Adds a field (usage: --field <name> <val> <inline=1/0>", default=[], action="append")
+		parser.add_argument("-g", "--guild", type=str, help="Specifies the server")
+		parser.add_argument("-c", "--channel", type=str, help="Specifies the channel")
+		parser.add_argument("-s", "--silent", help="Silences message on response. ", action="store_true")
+		parser.add_argument("-d", "--dm", type=int, help="Direct messages someone. ")
+		try:
+			string = ' '.join(msg.message.content.split(" ")[2:])
+			args = parser.parse_args(shlex.split(string))
+			if not (args.guild or args.channel or args.dm):
+				embed = discord.Embed(title=args.title, author="", color=args.color)
+				embed.set_author(name=args.aname, url=args.aurl, icon_url=args.aicourl)
+				embed.set_thumbnail(url=args.thumbnail)
+				embed.set_image(url=args.picture)
+				embed.set_footer(text=args.footer)
+				if args.field != "":
+					for i in args.field:
+						if i[2] not in ["1", "0"]:
+							raise SystemExit
+						embed.add_field(name=i[0], value=i[1], inline=bool(int(i[2])))
+				await msg.send(args.message, embed=embed)
+
+				if not args.silent:
+					embed = EmbedSystem.SimpleEmbed(e_sudo)
+					embed.add_field("Sent!", "", False)
+					await stext(msg, embed)
+			elif args.channel and not args.guild and not args.dm:
+				embed = EmbedSystem.SimpleEmbed(e_sudo)
+				embed.add_field("Please specify a guild along with the channel using -g. ", "", False)
+				await stext(msg, embed)
+				return
+			elif args.guild and not args.channel and not args.dm:
+				for guild in client.guilds:
+					if guild.name == ' '.join(args.guild):
+
+						embed = discord.Embed(title=args.title, author="", color=args.color)
+						embed.set_author(name=args.aname, url=args.aurl, icon_url=args.aicourl)
+						embed.set_thumbnail(url=args.thumbnail)
+						embed.set_image(url=args.picture)
+						embed.set_footer(text=args.footer)
+						if args.field != "":
+							for i in args.field:
+								if i[3] not in ["1", "0"]:
+									raise SystemExit
+								embed.add_field(name=i[0], value=i[1], inline=i[3])
+						await guild.text_channels[0].send(args.message, embed=embed)
+						if not args.silent:
+							embed = EmbedSystem.SimpleEmbed(e_sudo)
+							embed.add_field("Sent!", "", False)
+							await stext(msg, embed)
+						return
+				embed = EmbedSystem.SimpleEmbed(e_sudo)
+				embed.add_field("Guild not found. ", "", False)
+				await stext(msg, embed)
+				return
+			elif args.guild and args.channel and not args.dm:
+				for guild in client.guilds:
+					if guild.name == args.guild:
+						for i in range(len(guild.text_channels)):
+							if guild.text_channels[i].name == args.channel:
+								embed = discord.Embed(title=args.title, author="", color=args.color)
+								embed.set_author(name=args.aname, url=args.aurl, icon_url=args.aicourl)
+								embed.set_thumbnail(url=args.thumbnail)
+								embed.set_image(url=args.picture)
+								embed.set_footer(text=args.footer)
+								if args.field != "":
+									for i in args.field:
+										if i[3] not in ["1", "0"]:
+											raise SystemExit
+										embed.add_field(name=i[0], value=i[1], inline=i[3])
+								await guild.text_channels[i].send(args.message, embed=embed)
+								if not args.silent:
+									embed = EmbedSystem.SimpleEmbed(e_sudo)
+									embed.add_field("Sent!", "", False)
+									await stext(msg, embed)
+								return
+
+				embed = EmbedSystem.SimpleEmbed(e_sudo)
+				embed.add_field("Guild / Channel not found. ", "", False)
+				await stext(msg, embed)
+				return
+			elif args.dm and (args.guild or args.channel):
+				embed = EmbedSystem.SimpleEmbed(e_sudo)
+				embed.add_field("The --dm flag must be on its own! ", "", False)
+				await stext(msg, embed)
+			else:
+				try:
+					user = client.get_user(args.dm)
+				except:
+					embed = EmbedSystem.SimpleEmbed(e_sudo)
+					embed.add_field("User not found. ", args.message, False)
+					await stext(msg, embed)
+					return
+				embed = discord.Embed(title=args.title, author="", color=args.color)
+				embed.set_author(name=args.aname, url=args.aurl, icon_url=args.aicourl)
+				embed.set_thumbnail(url=args.thumbnail)
+				embed.set_image(url=args.picture)
+				embed.set_footer(text=args.footer)
+				if args.field != "":
+					for i in args.field:
+						if i[3] not in ["1", "0"]:
+							raise SystemExit
+						embed.add_field(name=i[0], value=i[1], inline=i[3])
+				await user.send(args.message, embed=embed)
+				if not args.silent:
+					embed = EmbedSystem.SimpleEmbed(e_sudo)
+					embed.add_field("Sent!", "", False)
+					await stext(msg, embed)
+				return
+
+		except SystemExit:
+			embed = EmbedSystem.SimpleEmbed(e_sudo)
+			embed.add_field(parser.format_usage(), '\n'.join(parser.format_help().split("\n")[1:]), False)
+			await stext(msg, embed)
+	if msg.message.content.split(" ")[1] == "rm":
+		parser = argparse.ArgumentParser(description="Removes messages")
+		parser.add_argument("messageid", type=int, help="Specifies the message id")
+		parser.add_argument("channelid", type=int, help="Specifies the channel id")
+		parser.add_argument("-s", "--silent", help="Silences message on response. ", action="store_true")
+
+		try:
+			string = ' '.join(msg.message.content.split(" ")[2:])
+			args = parser.parse_args(shlex.split(string))
+			try:
+				await client.http.delete_message(channel_id=args.channelid, message_id=args.messageid)
+				if not args.silent:
+					embed = EmbedSystem.SimpleEmbed(e_sudo)
+					embed.add_field("Message deleted!", "[" + str(args.channelid) + ", " + str(args.messageid) + "]", False)
+					await stext(msg, embed)
+				return
+			except:
+				embed = EmbedSystem.SimpleEmbed(e_sudo)
+				embed.add_field("Message / Channel not found. ", "", False)
+				await stext(msg, embed)
+				return
+		except SystemExit:
+			embed = EmbedSystem.SimpleEmbed(e_sudo)
+			embed.add_field(parser.format_usage(), '\n'.join(parser.format_help().split("\n")[1:]), False)
+			await stext(msg, embed)
+			return
+
+	if msg.message.content.split(" ")[1] == "edit":
+		parser = argparse.ArgumentParser(description="Edits messages")
+		parser.add_argument("messageid", type=int, help="Specifies the message id")
+		parser.add_argument("channelid", type=int, help="Specifies the channel id")
+		parser.add_argument("message", type=str, help="Specifies the message")
+		parser.add_argument("-s", "--silent", help="Silences message on response. ", action="store_true")
+
+		try:
+			string = ' '.join(msg.message.content.split(" ")[2:])
+			args = parser.parse_args(shlex.split(string))
+			try:
+				await client.http.edit_message(channel_id=args.channelid, message_id=args.messageid, content=args.message)
+				if not args.silent:
+					embed = EmbedSystem.SimpleEmbed(e_sudo)
+					embed.add_field("Message edited!", "[" + str(args.channelid) + ", " + str(args.messageid) + "]", False)
+					await stext(msg, embed)
+				return
+			except:
+				embed = EmbedSystem.SimpleEmbed(e_sudo)
+				embed.add_field("Message / Channel not found. ", "", False)
+				await stext(msg, embed)
+				return
+		except SystemExit:
+			embed = EmbedSystem.SimpleEmbed(e_sudo)
+			embed.add_field(parser.format_usage(), '\n'.join(parser.format_help().split("\n")[1:]), False)
+			await stext(msg, embed)
+			return
+
+
+
+
+
+
 
 
 @client.command(name="ping")
@@ -289,9 +572,11 @@ async def bw(msg):
 async def info(msg):
 	embed = EmbedSystem.SimpleEmbed(e_info)
 	embed.set_thumbnail("https://crafatar.com/avatars/dc1a1d7f-66f1-46f5-92de-161f5dd051c9")
-	embed.add_field("This bot was built by EvilMuffinHa#5417. It gets bedwars stats using requests to sk1er.club. ",
-					"Invite it using this [link.](https://discord.com/api/oauth2/authorize?client_id=694645515983519794&permissions=515136&scope=bot)",
-					False)
+	embed.add_field(
+		"This bot was built by EvilMuffinHa#5417. It gets bedwars stats using the hypixel and mojang APIs. ",
+		"Invite it using this [link.](https://discord.com/api/oauth2/authorize?client_id=694645515983519794&permissions=515136&scope=bot) " +
+		"Check out the source code at this [link.](https://github.com/EvilMuffinHa/hypixel-online)",
+		False)
 	await stext(msg, embed)
 
 
@@ -336,153 +621,6 @@ async def help(msg):
 			"https://cdn.discordapp.com/avatars/694645515983519794/9d425f6f93006a03dfa32b060a8449ee.png?size=128")
 		await stext(msg, embed)
 
-
-@client.command(name="link")
-async def link(msg):
-	inputs = msg.message.content.split(" ")
-	if len(inputs) != 2:
-		embed = EmbedSystem.SimpleEmbed(e_link)
-		embed.add_field("Please enter the right arguments! ", "Usage: `" + await prefix_writing(msg) + "link IGN`",
-						False)
-		embed.add_field("", "", False)
-		await stext(msg, embed)
-		return
-
-	playername = inputs[1]
-
-	async with aiohttp.ClientSession() as s:
-		async with s.get('https://api.mojang.com/users/profiles/minecraft/' + playername) as r:
-
-			if r.status == 200:
-				html = await r.json()
-				UUID = html["id"]
-			else:
-				embed = EmbedSystem.SimpleEmbed(e_link)
-				embed.add_field("No minecraft account found. ", "", False)
-				await stext(msg, embed)
-				return
-
-	DiscordID = msg.message.author.id
-
-	js = await get_data("linked")
-
-	for i in js.keys():
-		if js[i][0] == msg.message.author.id:
-			name = await get_name_from_uuid(i)
-			embed = EmbedSystem.SimpleEmbed(e_link)
-			embed.set_thumbnail("https://crafatar.com/renders/body/" + i + "?overlay=true")
-			embed.add_field("You are already linked to " + name + "!", "", False)
-			await stext(msg, embed)
-			return
-
-	if UUID in js.keys():
-		if js[UUID][0] == msg.message.author.id:
-			name = await get_name_from_uuid(UUID)
-			if name.startswith("Connection error"):
-				embed = EmbedSystem.SimpleEmbed(e_link)
-				embed.set_thumbnail("https://crafatar.com/renders/body/" + UUID + "?overlay=true")
-				embed.add_field("You are already linked to " + name + "!", "", False)
-				await stext(msg, embed)
-				return
-			embed = EmbedSystem.SimpleEmbed(e_link)
-			embed.set_thumbnail("https://crafatar.com/renders/body/" + UUID + "?overlay=true")
-			embed.add_field("You are already linked to " + name + "!", "", False)
-			await stext(msg, embed)
-			return
-		else:
-			name = await get_name_from_uuid(UUID)
-			if name.startswith("Connection error"):
-				embed = EmbedSystem.SimpleEmbed(e_link)
-				embed.add_field("Someone else is already linked" + " with " + name + "!",
-								"", False)
-				embed.set_thumbnail("https://crafatar.com/renders/body/" + UUID + "?overlay=true")
-				await stext(msg, embed)
-
-				return
-
-			embed = EmbedSystem.SimpleEmbed(e_link)
-			embed.add_field("Someone else is already linked" + " with " + name + "!", "",
-							False)
-			embed.set_thumbnail("https://crafatar.com/renders/body/" + UUID + "?overlay=true")
-			await stext(msg, embed)
-			return
-	async with aiohttp.ClientSession() as ss:
-		async with ss.get(
-				"https://api.hypixel.net/player?key=" + os.getenv("HYPIXELAPITOKEN") + "&name=" + playername) as rr:
-			print("https://api.hypixel.net/player?key=" + os.getenv("HYPIXELAPITOKEN") + "&name=" + playername)
-			if int(rr.status) == 200:
-				html = await rr.json()
-				try:
-					level = html["player"]["achievements"]["bedwars_level"]
-				except KeyError:
-					embed = EmbedSystem.SimpleEmbed(e_link)
-					embed.add_field("No minecraft account found. ", "", False)
-					await stext(msg, embed)
-					return
-
-			else:
-				embed = EmbedSystem.SimpleEmbed(e_err)
-				embed.add_field("Connection error: ERROR " + str(rr.status), "", False)
-				await stext(msg, embed)
-				return
-
-	if int(level) < 100:
-		prestige = 0
-	elif int(level) < 200:
-		prestige = 1
-	elif int(level) < 300:
-		prestige = 2
-	elif int(level) < 400:
-		prestige = 3
-	elif int(level) < 500:
-		prestige = 4
-	elif int(level) < 500:
-		prestige = 5
-	elif int(level) < 700:
-		prestige = 6
-	elif int(level) < 800:
-		prestige = 7
-	elif int(level) < 900:
-		prestige = 8
-	elif int(level) < 1000:
-		prestige = 9
-	elif int(level) >= 1000:
-		prestige = 10
-
-	js[UUID] = [DiscordID, {"on-prestige": 2}, {"prestige": prestige}]
-
-	await set_data("linked", js)
-
-	embed = EmbedSystem.SimpleEmbed(e_link)
-	embed.add_field("Linked with " + playername + "!", "", False)
-	embed.set_thumbnail("https://crafatar.com/renders/body/" + UUID + "?overlay=true")
-
-	await stext(msg, embed)
-
-
-@client.command(name="unlink")
-async def unlink(msg):
-	js = await get_data("linked")
-	for i in js.keys():
-		if js[i][0] == msg.message.author.id:
-			UUID = i
-			del js[i]
-			await set_data("linked", js)
-
-			playername = await get_name_from_uuid(UUID)
-
-			embed = EmbedSystem.SimpleEmbed(e_link)
-			embed.add_field("Unlinked from " + playername + "!", "", False)
-			embed.set_thumbnail("https://crafatar.com/renders/body/" + UUID + "?overlay=true")
-			await stext(msg, embed)
-			return
-
-	embed = EmbedSystem.SimpleEmbed(e_link)
-	embed.add_field("You have not been linked! ", "", False)
-	await stext(msg, embed)
-	return
-
-
 @client.command(name="online")
 async def online(msg):
 	if len(msg.message.content.split(" ")) != 2:
@@ -517,61 +655,6 @@ async def online(msg):
 				embed.add_field("Connection error: ERROR " + str(r.status), "", False)
 				await stext(msg, embed)
 
-
-@tasks.loop(seconds=1)
-async def check_if_prestiged_bw():
-	js = await get_data("linked")
-
-	for i in js.keys():
-		async with aiohttp.ClientSession() as s:
-			async with s.get("https://sk1er.club/stats/" + await get_name_from_uuid(i)) as r:
-				if r.status == 200:
-					html = await r.text()
-					bedwars_section = html.split('d="collapseBedwars-1"')[1]
-					bs = bedwars_section.split("</div></div></div>")[0]
-					level = int(bs.split("<strong>")[8].split("</strong>")[1].split("<br>")[0].replace(",", ""))
-					embed = EmbedSystem.SimpleEmbed(e_prestige)
-					embed.set_thumbnail("https://crafatar.com/renders/body/" + i + "?overlay=true")
-
-					if level >= 100 and js[i][2]["prestige"] == 0:
-						embed.add_field("Congratulations on Iron Prestige! ", "", False)
-						if js[i][1]["on-prestige"] == 1:
-							user = client.get_user(js[i][0])
-							await user.send(embed=embed.getEmbed())
-						if js[i][1]["on-prestige"] == 2:
-							for guild in client.guilds:
-								if guild.get_member(js[i][0]):
-									js = await get_data("guilds")
-									try:
-										channel_id = js[guild.id][1]
-									except:
-										channel_id = guild.channels[0]
-
-					# send to (channel_id), also add a .mod command to change guild settings
-
-					elif level >= 200 and js[i][2]["prestige"] == 1:
-						pass
-					elif level >= 300 and js[i][2]["prestige"] == 2:
-						pass
-					elif level >= 400 and js[i][2]["prestige"] == 3:
-						pass
-					elif level >= 500 and js[i][2]["prestige"] == 4:
-						pass
-					elif level >= 600 and js[i][2]["prestige"] == 5:
-						pass
-					elif level >= 700 and js[i][2]["prestige"] == 6:
-						pass
-					elif level >= 800 and js[i][2]["prestige"] == 7:
-						pass
-					elif level >= 900 and js[i][2]["prestige"] == 8:
-						pass
-					elif level >= 1000 and js[i][2]["prestige"] == 9:
-						pass
-
-				else:
-					pass
-
-
 async def stext(msg, embedsys):
 	await msg.send(embed=embedsys.getEmbed())
 	gn = msg.message.guild.name
@@ -602,4 +685,4 @@ async def on_command_error(msg, error):
 		await stext(msg, embed)
 
 
-client.run(os.getenv('HYPIXELONLINEDEVTOKEN'))
+client.run(os.getenv('HYPIXELONLINETOKEN'))
